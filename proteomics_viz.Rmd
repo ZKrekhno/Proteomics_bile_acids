@@ -1,0 +1,28 @@
+---
+title: "Visualizing Bile Acids Proteomics results"
+output: html_notebook
+---
+
+```{r lib-setup, echo=FALSE, include=FALSE}
+library(clusterProfiler)
+library(EnhancedVolcano)
+library(tidyverse)
+library(readxl)
+```
+
+```{r import}
+mq <- read_tsv(here::here("normalyzer_limma_de_results_annotated.tsv"))
+meta <- read_tsv(here::here("norm_meta.tsv"))
+mq_res <- mq %>% 
+  select(contains("Log"), contains("Adj"), contains("Majority"), contains("Gene"))
+mq_mat <- mq %>% 
+  select(`Gene names`, `Majority protein IDs`, matches("(C|L)[1-6](c|m)"))
+mq_res_list <- list(select(mq_res, -contains("Cc-Lc")),
+                    select(mq_res, -contains("Cm-Lm")))
+```
+
+Need to make the following:
+
+    A Venn diagram depicting number for differentially abundant proteins identified in cytoplasmic fraction, in membrane fraction or in both the fraction
+    Volcano plots
+    And the dot plots from GO ontogeny analysis just like the link you sent.
