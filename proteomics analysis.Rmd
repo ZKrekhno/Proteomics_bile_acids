@@ -1,0 +1,78 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+ 
+```{r}
+knitr::opts_chunk$set(fig.width = 12, fig.height = 10)
+```
+
+```{r}
+library(tidyverse)
+library(limma)
+library(edgeR)
+library(readxl)
+```
+Read in the edited maxquant proteinGroups file. Only keep columns with iBAQ intensitites, gene info, and contaminnat info.
+Remove iBAQ peptides column from the protein groups file
+```{r fig.width=15}
+mq <- read_excel("ravi_pg.xlsx", col_types = c("text", 
+     "text", "text", "text", "numeric", "numeric", 
+     "numeric", "numeric", "numeric", "numeric", 
+     "numeric", "numeric", "numeric", "numeric", 
+     "numeric", "numeric", "numeric", "numeric", 
+     "numeric", "numeric", "numeric", "numeric", 
+     "numeric", "numeric", "numeric", "numeric", 
+     "numeric", "numeric", "numeric", "numeric", 
+     "numeric", "text", "text", "text"))
+mq_cleaned <- mq %>% 
+  filter(is.na(Reverse) , is.na(`Only identified by site`), is.na(`Potential contaminant`)) %>% 
+  select(`Protein IDs`, `Majority protein IDs`, `Protein names`, `Gene names` ,matches("iBAQ (([01][0-9])|(2[0-4]))")) 
+codes <- read_excel(here::here("ravi_proteinGroups.xlsx"), sheet = 2) %>% 
+  mutate(reps = case_when(
+    str_detect(identity, "C.c") ~ "Cc",
+    str_detect(identity, "C.m") ~ "Cm",
+    str_detect(identity, "L.c") ~ "Lc",
+    str_detect(identity, "L.m") ~ "Lm"
+  ))
+```
+
+
+Start with normalyzerDE to test all normalization methods
+```{r eval=FALSE}
+library(NormalyzerDE)
+library(SummarizedExperiment)
+#Prepare objects for normalyzer
+norm_meta <- codes %>% 
+  select("sample" = identity, "group" = reps)
+norm_mq <- mq_cleaned %>% 
+  select(`Majority protein IDs`, contains("iBAQ")) %>% 
+  rename_with(function(x) norm_meta$sample [1:24], contains("iBAQ")) %>% 
+  filter(!str_detect(`Majority protein IDs`,"REV_"))
+write_tsv(norm_meta [1:24,], file = "norm_meta.tsv")
+write_tsv(norm_mq , file = "norm_mq.tsv")
+  
+normalyzer(jobName="test_run", designPath="norm_meta.tsv", dataPath="norm_mq.tsv",
+           outputDir = here::here("normalyzer/"))
+
+```
+Next perform normalyzer differential expression with the vsn normalization, since it looked to be the best. This is very subjective though.
+
+```{r eval=FALSE}
+normalyzerDE("test_run", designPath = here::here("norm_meta.tsv"), 
+             dataPath=here::here("normalyzer/test_run/VSN-normalized.txt"),
+             outputDir = here::here("normalyzer/"), comparisons = c("Cc-Lc","Cm-Lm"),
+             sigThres = 0.05, log2FoldThres = 1)
+```
+Read in the normalyzerDE table and annotate it
+```{r}
+norm_meta <- read_tsv(here::here("norm_meta.tsv"))
+norm_mq_annot <- mq_cleaned %>% 
+  select(-contains("iBAQ")) 
+res <- read_tsv(here::here("normalyzer/test_run/test_run_stats.tsv"))
+#Annotate the result table
+res_annot <- res %>% 
+  left_join(norm_mq_annot)
+write_tsv(res_annot, file = here::here("normalyzer_limma_de_results_annotated.tsv"))
+```
+
