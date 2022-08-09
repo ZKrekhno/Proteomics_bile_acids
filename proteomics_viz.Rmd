@@ -6,6 +6,7 @@ output: html_notebook
 ```{r lib-setup, echo=FALSE, include=FALSE}
 library(clusterProfiler)
 library(EnhancedVolcano)
+library(org.Hs.eg.db)
 library(tidyverse)
 library(readxl)
 ```
@@ -43,7 +44,7 @@ Need to make the following:
 #Filter results to only include DA proteins
 da_list <- mq_res_list %>% 
   map(filter, AdjPVal < 0.05, abs(log2FoldChange) > 1)
-#Pull just the gene names for DA proteins
+#Pull just the Protein IDs for DA proteins
 da_genes <- da_list %>% map(pull, `Majority protein IDs`) %>% 
   set_names(nm = c("Membrane-bound proteins", "Cytosolic proteins"))
 ggvenn::ggvenn(da_genes, text_size = 10, set_name_size = 6,
@@ -69,8 +70,58 @@ customvolcano <- function(df, rows, title, selectLab="") {
                 pCutoff = 0.05, FCcutoff = 1, legendPosition = 'bottom', title = title, subtitle = NULL,
                 selectLab = selectLab, drawConnectors = T, boxedLabels = T))
 }
-pdf(here::here("Volcano plots top 7 hits labelled.pdf"), width = 10)
+#pdf(here::here("Volcano plots top 7 hits labelled.pdf"), width = 10)
 pwalk(plot_list, customvolcano)
-dev.off()
+#dev.off()
 ```
+# Functional enrichment
+```{r cluster-enrich}
+set.seed(711)
+#Get the whole human genome as universe
+human_genom <- org.Hs.egSYMBOL
+mapped_genes <- mappedRkeys(human_genom)
+h <- read.gmt(list.files(path = here::here("."),pattern = "h.all"))
+c2_cp <- read.gmt(list.files(path = here::here("."),pattern = "c2.cp"))  
+c2_noID <- c2_cp %>% 
+  mutate(term = str_remove(term, "[:alpha:]+_"))
+#Set up lists of genes for analysis
+#Pull just the gene names for DA proteins
+da_symbols <- da_list %>% map(pull, `Genes`) %>% 
+  set_names(nm = c("Membrane-bound proteins", "Cytosolic proteins"))
+enrich_h_list <- map(da_symbols, ~enricher(.,
+                     TERM2GENE = h,
+                     universe = mapped_genes,
+                     pAdjustMethod = "BH",
+                     pvalueCutoff = 0.05,
+                     qvalueCutoff = 0.05))
+enrich_c2_list <- map(da_symbols, ~enricher(.,
+                     TERM2GENE = c2_noID,
+                     universe = mapped_genes,
+                     pAdjustMethod = "BH",
+                     pvalueCutoff = 0.05,
+                     qvalueCutoff = 0.05))
+ego_bp <- map(da_symbols, ~enrichGO(gene = .,
+                OrgDb         = org.Hs.eg.db,
+                universe = mapped_genes,
+                keyType       = 'SYMBOL',
+                ont           = "BP",
+                pAdjustMethod = "BH",
+                pvalueCutoff  = 0.05,
+                qvalueCutoff  = 0.05))
+ego_bp <- map(ego_bp,enrichplot::pairwise_termsim)
+ego_bp2 <- ego_bp %>% 
+  map(~clusterProfiler::simplify(., cutoff=0.4, by="p.adjust", select_fun=min))
+```
+
+Plot the functional enrichment results
+
+```{r cluster-plotting, fig.height=9, fig.width=7}
+dot_titles <- rep(c("Hallmark geneset", "C2 Canonical Pathways", "GO BP"), each = 2) %>% 
+  str_c(names(da_genes), sep = "\n")
+#pdf(here::here("Functional enrichment analyses.pdf"), height = 9, width = 7)
+walk2(c(enrich_h_list, enrich_c2_list, ego_bp2), dot_titles, 
+      ~print(dotplot(.x, showCategory = 15) + ggtitle(.y)))
+#dev.off()
+```
+
 
