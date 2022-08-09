@@ -18,11 +18,17 @@ mq_res <- mq %>%
 mq_mat <- mq %>% 
   select(`Gene names`, `Majority protein IDs`, matches("(C|L)[1-6](c|m)"))
 #Convert the results table into a list and unify the columns names. Invert the foldChanges, so that comparisons are L-C instead of C-L.
+#Reduce Gene names to just one gene for analysis
 mq_res_list <- list(select(mq_res, -contains("Cc-Lc")),
                     select(mq_res, -contains("Cm-Lm"))) %>% 
   set_names(nm = c("Membrane", "Cyto")) %>% 
   map(rename_with, ~str_remove(.,"C(c|m)-L(c|m)_") ,matches("C(c|m)-L(c|m)_")) %>% 
-  map(mutate, across(contains("log2"), ~ -.x))
+  map(mutate, across(contains("log2"), ~ -.x)) %>% 
+  map(separate, `Gene names`, into = letters [1:2], extra = "drop", sep = ";") %>% 
+  map(mutate, Genes = case_when(
+    str_detect(a, "orf") & !is.na(b) & str_detect(b, "orf", negate = T) ~ b,
+    TRUE ~ a
+  ), Gene_rows = Genes) 
 ```
 
 Need to make the following:
@@ -38,10 +44,33 @@ Need to make the following:
 da_list <- mq_res_list %>% 
   map(filter, AdjPVal < 0.05, abs(log2FoldChange) > 1)
 #Pull just the gene names for DA proteins
-da_genes <- da_list %>% map(pull, `Gene names`) %>% 
+da_genes <- da_list %>% map(pull, `Majority protein IDs`) %>% 
   set_names(nm = c("Membrane-bound proteins", "Cytosolic proteins"))
 ggvenn::ggvenn(da_genes, text_size = 10, set_name_size = 6,
-               fill_color = c("indianred", "royalblue1"), show_percentage = F)
+               fill_color = c("indianred", "royalblue1"), show_percentage = F) 
 #ggsave(here::here("Venn diagram DA proteins.png"), units = "in", dpi = 720, width = 8, height = 6)
+```
+
+
+# Volcano plots
+```{r enhancedvolcano, fig.width=10}
+df <- mq_res_list[[1]]
+rows <- map(mq_res_list, pull, var = Gene_rows)
+titles <- names(da_genes)
+top_hits <- mq_res_list %>% 
+  map(filter, AdjPVal < 0.05) %>% 
+  map(arrange, desc(abs(log2FoldChange))) %>% 
+  map(slice, 1:7) %>% 
+  map(pull, var = Gene_rows)
+plot_list <- list(df = mq_res_list, rows = rows, title = titles, selectLab = top_hits)
+#Create a custom volcano plot function
+customvolcano <- function(df, rows, title, selectLab="") {
+  print(EnhancedVolcano(toptable = df,lab = rows, x = "log2FoldChange", y = "AdjPVal",
+                pCutoff = 0.05, FCcutoff = 1, legendPosition = 'bottom', title = title, subtitle = NULL,
+                selectLab = selectLab, drawConnectors = T, boxedLabels = T))
+}
+pdf(here::here("Volcano plots top 7 hits labelled.pdf"), width = 10)
+pwalk(plot_list, customvolcano)
+dev.off()
 ```
 
