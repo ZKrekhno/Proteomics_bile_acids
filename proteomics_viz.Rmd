@@ -51,6 +51,14 @@ ggvenn::ggvenn(da_genes, text_size = 10, set_name_size = 6,
                fill_color = c("indianred", "royalblue1"), show_percentage = F) 
 #ggsave(here::here("Venn diagram DA proteins.png"), units = "in", dpi = 720, width = 8, height = 6)
 ```
+Get identities of common DE proteins
+```{r intersect-de}
+common_top <- da_genes %>% 
+  reduce(intersect)
+mq_intersect_top <- mq_res %>% 
+  filter(`Majority protein IDs` %in% common_top) 
+#write_csv(mq_intersect_top, here::here("Shared DE proteins.csv"))
+```
 
 
 # Volcano plots
