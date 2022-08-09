@@ -17,8 +17,12 @@ mq_res <- mq %>%
   select(contains("Log"), contains("Adj"), contains("Majority"), contains("Gene"))
 mq_mat <- mq %>% 
   select(`Gene names`, `Majority protein IDs`, matches("(C|L)[1-6](c|m)"))
+#Convert the results table into a list and unify the columns names. Invert the foldChanges, so that comparisons are L-C instead of C-L.
 mq_res_list <- list(select(mq_res, -contains("Cc-Lc")),
-                    select(mq_res, -contains("Cm-Lm")))
+                    select(mq_res, -contains("Cm-Lm"))) %>% 
+  set_names(nm = c("Membrane", "Cyto")) %>% 
+  map(rename_with, ~str_remove(.,"C(c|m)-L(c|m)_") ,matches("C(c|m)-L(c|m)_")) %>% 
+  map(mutate, across(contains("log2"), ~ -.x))
 ```
 
 Need to make the following:
@@ -26,3 +30,10 @@ Need to make the following:
     A Venn diagram depicting number for differentially abundant proteins identified in cytoplasmic fraction, in membrane fraction or in both the fraction
     Volcano plots
     And the dot plots from GO ontogeny analysis just like the link you sent.
+
+# Venn diagram
+
+```{r venn}
+
+```
+
