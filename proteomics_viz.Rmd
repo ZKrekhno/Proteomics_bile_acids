@@ -1,6 +1,9 @@
 ---
 title: "Visualizing Bile Acids Proteomics results"
-output: html_notebook
+output:
+  pdf_document: 
+    highlight: tango
+  html_notebook: default
 ---
 
 ```{r lib-setup, echo=FALSE, include=FALSE}
@@ -18,7 +21,8 @@ mq_res <- mq %>%
   select(contains("Log"), contains("Adj"), contains("Majority"), contains("Gene"))
 mq_mat <- mq %>% 
   select(`Gene names`, `Majority protein IDs`, matches("(C|L)[1-6](c|m)"))
-#Convert the results table into a list and unify the columns names. Invert the foldChanges, so that comparisons are L-C instead of C-L.
+#Convert the results table into a list and unify the columns names. 
+#Invert the foldChanges, so that comparisons are L-C instead of C-L.
 #Reduce Gene names to just one gene for analysis
 mq_res_list <- list(select(mq_res, -contains("Cc-Lc")),
                     select(mq_res, -contains("Cm-Lm"))) %>% 
@@ -31,13 +35,6 @@ mq_res_list <- list(select(mq_res, -contains("Cc-Lc")),
     TRUE ~ a
   ), Gene_rows = Genes) 
 ```
-
-Need to make the following:
-
-    A Venn diagram depicting number for differentially abundant proteins identified in cytoplasmic fraction, in membrane fraction or in both the fraction
-    Volcano plots
-    And the dot plots from GO ontogeny analysis just like the link you sent.
-
 # Venn diagram
 
 ```{r venn}
@@ -75,7 +72,8 @@ plot_list <- list(df = mq_res_list, rows = rows, title = titles, selectLab = top
 #Create a custom volcano plot function
 customvolcano <- function(df, rows, title, selectLab="") {
   print(EnhancedVolcano(toptable = df,lab = rows, x = "log2FoldChange", y = "AdjPVal",
-                pCutoff = 0.05, FCcutoff = 1, legendPosition = 'bottom', title = title, subtitle = NULL,
+                pCutoff = 0.05, FCcutoff = 1, legendPosition = 'bottom', 
+                title = title, subtitle = NULL,
                 selectLab = selectLab, drawConnectors = T, boxedLabels = T))
 }
 #pdf(here::here("Volcano plots top 7 hits labelled.pdf"), width = 10)
@@ -130,6 +128,10 @@ dot_titles <- rep(c("Hallmark geneset", "C2 Canonical Pathways", "GO BP"), each 
 walk2(c(enrich_h_list, enrich_c2_list, ego_bp2), dot_titles, 
       ~print(dotplot(.x, showCategory = 15) + ggtitle(.y)))
 #dev.off()
+```
+# Session Info
+```{r}
+sessionInfo()
 ```
 
 
