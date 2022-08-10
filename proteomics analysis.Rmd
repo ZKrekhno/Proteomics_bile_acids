@@ -1,21 +1,24 @@
 ---
-title: "R Notebook"
-output: html_notebook
+title: "NormalyzerDE analysis of Bile Acid Proteomics Data"
+output:
+  pdf_document: 
+    highlight: tango
+  html_notebook: default
 ---
  
-```{r}
-knitr::opts_chunk$set(fig.width = 12, fig.height = 10)
-```
-
-```{r}
+```{r lib-1, echo=TRUE, warning=FALSE, message=FALSE}
 library(tidyverse)
 library(limma)
 library(edgeR)
 library(readxl)
 ```
-Read in the edited maxquant proteinGroups file. Only keep columns with iBAQ intensitites, gene info, and contaminnat info.
-Remove iBAQ peptides column from the protein groups file
-```{r fig.width=15}
+
+# Maxquant Object Import
+
+Read in the MaxQuant proteinGroups file. 
+Only keep columns with iBAQ intensitites, gene info, and contaminant info.
+Remove iBAQ peptides column from the protein groups file.
+```{r eval=FALSE}
 mq <- read_excel("ravi_pg.xlsx", col_types = c("text", 
      "text", "text", "text", "numeric", "numeric", 
      "numeric", "numeric", "numeric", "numeric", 
@@ -37,11 +40,9 @@ codes <- read_excel(here::here("ravi_proteinGroups.xlsx"), sheet = 2) %>%
   ))
 ```
 
+Prepare tables for normalyzer analysis.
 
-Start with normalyzerDE to test all normalization methods
 ```{r eval=FALSE}
-library(NormalyzerDE)
-library(SummarizedExperiment)
 #Prepare objects for normalyzer
 norm_meta <- codes %>% 
   select("sample" = identity, "group" = reps)
@@ -51,12 +52,27 @@ norm_mq <- mq_cleaned %>%
   filter(!str_detect(`Majority protein IDs`,"REV_"))
 write_tsv(norm_meta [1:24,], file = "norm_meta.tsv")
 write_tsv(norm_mq , file = "norm_mq.tsv")
-  
+```
+
+# NormalyzerDE: normalization
+
+Use normalyzerDE to test all normalization methods.
+ 
+```{r lib-2, echo=TRUE, warning=FALSE, message=FALSE}
+library(NormalyzerDE)
+library(SummarizedExperiment)
+```
+
+```{r eval=FALSE}
 normalyzer(jobName="test_run", designPath="norm_meta.tsv", dataPath="norm_mq.tsv",
            outputDir = here::here("normalyzer/"))
 
 ```
-Next perform normalyzer differential expression with the vsn normalization, since it looked to be the best. This is very subjective though.
+
+# Differential Abundance Analysis
+
+Based on the QC plots from normalyzer DE, use vsn normalization for 
+differential abundance analysis.
 
 ```{r eval=FALSE}
 normalyzerDE("test_run", designPath = here::here("norm_meta.tsv"), 
@@ -64,8 +80,10 @@ normalyzerDE("test_run", designPath = here::here("norm_meta.tsv"),
              outputDir = here::here("normalyzer/"), comparisons = c("Cc-Lc","Cm-Lm"),
              sigThres = 0.05, log2FoldThres = 1)
 ```
-Read in the normalyzerDE table and annotate it
-```{r}
+
+Combine the original intensities table, and the DA analysis output.
+
+```{r eval=FALSE}
 norm_meta <- read_tsv(here::here("norm_meta.tsv"))
 norm_mq_annot <- mq_cleaned %>% 
   select(-contains("iBAQ")) 
@@ -75,4 +93,11 @@ res_annot <- res %>%
   left_join(norm_mq_annot)
 write_tsv(res_annot, file = here::here("normalyzer_limma_de_results_annotated.tsv"))
 ```
+
+# Session Info
+
+```{r}
+sessionInfo()
+```
+
 
