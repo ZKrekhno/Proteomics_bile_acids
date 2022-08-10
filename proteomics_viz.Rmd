@@ -6,7 +6,7 @@ output:
   html_notebook: default
 ---
 
-```{r lib-setup, echo=FALSE, include=FALSE}
+```{r lib-setup, echo=TRUE, warning=FALSE, message=FALSE}
 library(clusterProfiler)
 library(EnhancedVolcano)
 library(org.Hs.eg.db)
