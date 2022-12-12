@@ -8,17 +8,24 @@ output:
 
 ```{r lib-setup, echo=TRUE, warning=FALSE, message=FALSE}
 library(clusterProfiler)
-library(EnhancedVolcano)
 library(org.Hs.eg.db)
 library(tidyverse)
 library(readxl)
+library(ggprism)
+library(patchwork)
 ```
+
+Set up parameters - like colors 
+```{r setup}
+div_pal <- rcartocolor::carto_pal(7, "Geyser")
+```
+
 
 ```{r import}
 mq <- read_tsv(here::here("normalyzer_limma_de_results_annotated.tsv"))
 meta <- read_tsv(here::here("norm_meta.tsv"))
 mq_res <- mq %>% 
-  select(contains("Log"), contains("Adj"), contains("Majority"), contains("Gene"))
+  select(contains("Log"), contains("Adj"), contains("PValue"), contains("Majority"), contains("Gene"))
 mq_mat <- mq %>% 
   select(`Gene names`, `Majority protein IDs`, matches("(C|L)[1-6](c|m)"))
 #Convert the results table into a list and unify the columns names. 
@@ -43,10 +50,10 @@ da_list <- mq_res_list %>%
   map(filter, AdjPVal < 0.05, abs(log2FoldChange) > 1)
 #Pull just the Protein IDs for DA proteins
 da_genes <- da_list %>% map(pull, `Majority protein IDs`) %>% 
-  set_names(nm = c("Membrane-bound proteins", "Cytosolic proteins"))
+  set_names(nm = c("Membrane-bound Proteins", "Cytosolic Proteins"))
 ggvenn::ggvenn(da_genes, text_size = 10, set_name_size = 6,
-               fill_color = c("indianred", "royalblue1"), show_percentage = F) 
-#ggsave(here::here("Venn diagram DA proteins.png"), units = "in", dpi = 720, width = 8, height = 6)
+               fill_color = c("indianred", "royalblue1"), show_percentage = F)
+#ggsave(here::here("Euler diagram DA proteins.png"), units = "in", dpi = 720, width = 8, height = 6)
 ```
 Get identities of common DE proteins
 ```{r intersect-de}
@@ -59,22 +66,47 @@ mq_intersect_top <- mq_res %>%
 
 
 # Volcano plots
-```{r enhancedvolcano, fig.width=10}
-df <- mq_res_list[[1]]
+```{r volcano, fig.width=8, fig.height=6.6}
+#Add categories for signifcance
+mq_res_volc_list <- mq_res_list %>% 
+  map(mutate, 
+      Significance = case_when(
+        AdjPVal >= 0.05 | is.na(AdjPVal) ~ "Not Significant",
+        AdjPVal < 0.05 & log2FoldChange > 0 ~ "Up (q<0.05)",
+        AdjPVal < 0.05 & log2FoldChange < 0 ~ "Down (q<0.05)",
+      )) %>% 
+  map(mutate, 
+      Significance = fct_relevel(Significance,"Not Significant","Up (q<0.05)","Down (q<0.05)"))
+
+volcano_list <- mq_res_volc_list %>% 
+  map2(c("Membrane-bound Proteins", "Cytosolic Proteins"), 
+       ~ ggplot(.x, aes(x = log2FoldChange, y = -log10(PValue))) +
+         geom_point(aes(fill = Significance, color = Significance), shape = 21, alpha = 0.5, size = 2.5) +
+         scale_color_manual(values = c("grey85",div_pal [c(1,7)])) +
+         scale_fill_manual(values = c("grey85",div_pal [c(1,7)])) + 
+         labs(x = bquote(~Log[2] ~ "fold change"), y = bquote(~-Log[10] ~ italic(P)), title = .y) +
+         theme_linedraw(base_size = 15) +
+         theme(panel.grid = element_line(color =  "grey90"),
+               panel.grid.major = element_line(linewidth = 0.7),
+               panel.grid.minor = element_line(linewidth = 0.5),
+               panel.border = element_rect(fill = NA, color = "black", linewidth = 0.9)))
+walk(volcano_list, print)
+#walk2(volcano_list, names(volcano_list), 
+ #    ~ggsave(here::here(str_c("final results/volcano_plot_",.y,".png")), plot = .x, width = 8, height = 6.66, dpi = 1080))
+```
+
+
+```{r enhancedvolcano, fig.width=6, fig.height=5}
 rows <- map(mq_res_list, pull, var = Gene_rows)
 titles <- names(da_genes)
-top_hits <- mq_res_list %>% 
-  map(filter, AdjPVal < 0.05) %>% 
-  map(arrange, desc(abs(log2FoldChange))) %>% 
-  map(slice, 1:7) %>% 
-  map(pull, var = Gene_rows)
-plot_list <- list(df = mq_res_list, rows = rows, title = titles, selectLab = top_hits)
+
+plot_list <- list(df = mq_res_list, rows = rows, title = titles)
 #Create a custom volcano plot function
 customvolcano <- function(df, rows, title, selectLab="") {
   print(EnhancedVolcano(toptable = df,lab = rows, x = "log2FoldChange", y = "AdjPVal",
                 pCutoff = 0.05, FCcutoff = 1, legendPosition = 'bottom', 
                 title = title, subtitle = NULL,
-                selectLab = selectLab, drawConnectors = T, boxedLabels = T))
+                selectLab = selectLab, vline = NULL))
 }
 #pdf(here::here("Volcano plots top 7 hits labelled.pdf"), width = 10)
 pwalk(plot_list, customvolcano)
