@@ -96,22 +96,6 @@ walk(volcano_list, print)
 ```
 
 
-```{r enhancedvolcano, fig.width=6, fig.height=5}
-rows <- map(mq_res_list, pull, var = Gene_rows)
-titles <- names(da_genes)
-
-plot_list <- list(df = mq_res_list, rows = rows, title = titles)
-#Create a custom volcano plot function
-customvolcano <- function(df, rows, title, selectLab="") {
-  print(EnhancedVolcano(toptable = df,lab = rows, x = "log2FoldChange", y = "AdjPVal",
-                pCutoff = 0.05, FCcutoff = 1, legendPosition = 'bottom', 
-                title = title, subtitle = NULL,
-                selectLab = selectLab, vline = NULL))
-}
-#pdf(here::here("Volcano plots top 7 hits labelled.pdf"), width = 10)
-pwalk(plot_list, customvolcano)
-#dev.off()
-```
 # Functional enrichment
 ```{r cluster-enrich}
 set.seed(711)
@@ -120,11 +104,41 @@ human_genom <- org.Hs.egSYMBOL
 mapped_genes <- mappedRkeys(human_genom)
 h <- read.gmt(list.files(path = here::here("."),pattern = "h.all"))
 c2_cp <- read.gmt(list.files(path = here::here("."),pattern = "c2.cp"))  
-c2_noID <- c2_cp %>% 
-  mutate(term = str_remove(term, "[:alpha:]+_"))
+c2_kegg <- c2_cp %>% 
+  filter(str_detect(term, "KEGG")) 
+c2_react <- c2_cp %>% 
+  filter(str_detect(term,"REACTOME"))
 #Set up lists of genes for analysis
+prots_list <- vector(mode = "list", length = 4) %>% 
+  set_names(map_chr(cross2(c("Membrane-bound","Cytoplasmic"),c("Up","Down")), reduce, str_c, sep = "_"))
+#THis loop not working !!!! FIX !!!
+for(i in seq_along(prots_list)) {
+  if (str_detect(names(prots_list) [i], "Membrane")) {
+    res_dummy <- da_list [["Membrane"]]
+    if (str_detect(names(prots_list) [i], "Up")) {
+      prots_list [i] <- pull(filter(res_dummy, AdjPVal < 0.05, log2FoldChange > 0), var = "Genes")
+    } else {
+      prots_list [i] <- pull(filter(res_dummy, AdjPVal < 0.05, log2FoldChange < 0), var = "Genes")
+    }
+  } else {
+    res_dummy <- da_list [["Cyto"]]
+    if (str_detect(names(prots_list) [i], "Up")) {
+      prots_list [i] <- pull(filter(res_dummy, AdjPVal < 0.05, log2FoldChange > 0), var = "Genes")
+    } else {
+      prots_list [i] <- pull(filter(res_dummy, AdjPVal < 0.05, log2FoldChange < 0), var = "Genes")
+    }
+  }
+}
+
+
 #Pull just the gene names for DA proteins
-da_symbols <- da_list %>% map(pull, `Genes`) %>% 
+
+
+
+da_symbols <- 
+  da_list %>% 
+  
+  map(pull, `Genes`) %>% 
   set_names(nm = c("Membrane-bound proteins", "Cytosolic proteins"))
 enrich_h_list <- map(da_symbols, ~enricher(.,
                      TERM2GENE = h,
