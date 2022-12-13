@@ -313,8 +313,53 @@ pwalk(list(same_dim_dots [large_index], same_dim_dots_labs_list [large_index], n
 #dev.off()
 ```
 Last step is to create a UMAP graph of the data
-```{r umap}
+```{r umap, fig.width=6, fig.height=4}
 #Import vsn-normalized counts
+vsn_mq <- read_tsv(here::here(here::here("normalyzer/test_run/VSN-normalized.txt")))
+vsn_mq_mat <- vsn_mq %>% 
+  column_to_rownames(var = "Majority protein IDs") %>% 
+  #vsn is akin to log-transform so replace missing values with 1s (log of 0 is 1)
+  mutate(across(.fns = ~as.numeric(str_replace_na(.x, replacement = 1)))) %>% 
+  as.matrix() %>% 
+  t()
+#Create list of fraction-based samples
+vsn_mq_list <- map(set_names(c("c","m"), nm = c("Cyto","Membrane")), 
+                   ~ vsn_mq_mat [str_detect(rownames(vsn_mq_mat), .x),])
+#Run umap
+#Reduce number of neighbours
+custom_sets <- umap.defaults
+custom_sets$n_neighbors <- 4
+umap_fit_list <- map(vsn_mq_list, umap, config = custom_sets)
+#Extract coordinates
+umap_df_list <- umap_fit_list %>% 
+  map(~.x$layout) %>% 
+  map(as.data.frame) %>% 
+  map(rename, UMAP1 = V1, UMAP2 = V2) %>% 
+  map(rownames_to_column, var = "sample") %>% 
+  map(mutate, Condition = if_else(str_detect(sample, "L"), "LCA", "Control"))
+
+#Plot the results
+#pdf(here::here("final results/UMAP plots.pdf"), width = 6, height = 4)
+walk2(umap_df_list, names(umap_df_list), 
+      ~print(ggplot(.x, aes(UMAP1,UMAP2, color = Condition)) + 
+               geom_point(size = 3.5) +
+               theme_bw(base_size = 14) + 
+               labs(title = .y) +
+               scale_color_manual(values = c("black","grey70")) +
+               theme(panel.grid = element_blank())
+               ))
+walk2(umap_df_list, names(umap_df_list), 
+      ~print(ggplot(.x, aes(UMAP1,UMAP2, color = Condition)) + 
+               geom_point(size = 3.5) +
+               labs(title = .y, x = " ", y = " ") +
+               theme_void(base_size = 16) + 
+               scale_color_manual(values = c("black","grey70")) +
+               theme(panel.border = element_rect(linewidth = 1, color = "grey50", fill = NA),
+                     panel.grid = element_blank(),
+                     legend.title = element_blank(),
+                     axis.title = element_text())
+      ))
+#dev.off()
 
 ```
 
