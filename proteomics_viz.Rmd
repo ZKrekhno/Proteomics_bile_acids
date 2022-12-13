@@ -13,6 +13,8 @@ library(tidyverse)
 library(readxl)
 library(ggprism)
 library(patchwork)
+library(ggtext)
+library(glue)
 ```
 
 Set up parameters - like colors 
@@ -102,6 +104,13 @@ set.seed(711)
 #Get the whole human genome as universe
 human_genom <- org.Hs.egSYMBOL
 mapped_genes <- mappedRkeys(human_genom)
+#Try to get symbols from mq_res as universe
+universe_df <- mq_res %>% 
+  select(Gene = `Gene names`) %>% 
+  deframe() %>%  
+  map(str_split, ";") %>% 
+  flatten() %>% 
+  flatten_chr()
 h <- read.gmt(list.files(path = here::here("."),pattern = "h.all"))
 c2_cp <- read.gmt(list.files(path = here::here("."),pattern = "c2.cp"))  
 c2_kegg <- c2_cp %>% 
@@ -111,63 +120,126 @@ c2_react <- c2_cp %>%
 #Set up lists of genes for analysis
 prots_list <- vector(mode = "list", length = 4) %>% 
   set_names(map_chr(cross2(c("Membrane-bound","Cytoplasmic"),c("Up","Down")), reduce, str_c, sep = "_"))
-#THis loop not working !!!! FIX !!!
+#Select fold change cut-off and run the loop
+cutoff <- 1
 for(i in seq_along(prots_list)) {
   if (str_detect(names(prots_list) [i], "Membrane")) {
     res_dummy <- da_list [["Membrane"]]
     if (str_detect(names(prots_list) [i], "Up")) {
-      prots_list [i] <- pull(filter(res_dummy, AdjPVal < 0.05, log2FoldChange > 0), var = "Genes")
+      prots_list [[i]] <- pull(filter(res_dummy, AdjPVal < 0.05, log2FoldChange > cutoff), var = "Genes")
     } else {
-      prots_list [i] <- pull(filter(res_dummy, AdjPVal < 0.05, log2FoldChange < 0), var = "Genes")
+      prots_list [[i]] <- pull(filter(res_dummy, AdjPVal < 0.05, log2FoldChange < -cutoff), var = "Genes")
     }
   } else {
     res_dummy <- da_list [["Cyto"]]
     if (str_detect(names(prots_list) [i], "Up")) {
-      prots_list [i] <- pull(filter(res_dummy, AdjPVal < 0.05, log2FoldChange > 0), var = "Genes")
+      prots_list [[i]] <- pull(filter(res_dummy, AdjPVal < 0.05, log2FoldChange > cutoff), var = "Genes")
     } else {
-      prots_list [i] <- pull(filter(res_dummy, AdjPVal < 0.05, log2FoldChange < 0), var = "Genes")
+      prots_list [[i]] <- pull(filter(res_dummy, AdjPVal < 0.05, log2FoldChange < -cutoff), var = "Genes")
     }
   }
 }
 
 
-#Pull just the gene names for DA proteins
-
-
-
-da_symbols <- 
-  da_list %>% 
-  
-  map(pull, `Genes`) %>% 
-  set_names(nm = c("Membrane-bound proteins", "Cytosolic proteins"))
-enrich_h_list <- map(da_symbols, ~enricher(.,
+enrich_h_list <- map(prots_list, ~enricher(.,
                      TERM2GENE = h,
-                     universe = mapped_genes,
+                     universe = universe_df,
                      pAdjustMethod = "BH",
                      pvalueCutoff = 0.05,
                      qvalueCutoff = 0.05))
-enrich_c2_list <- map(da_symbols, ~enricher(.,
-                     TERM2GENE = c2_noID,
-                     universe = mapped_genes,
-                     pAdjustMethod = "BH",
-                     pvalueCutoff = 0.05,
-                     qvalueCutoff = 0.05))
-ego_bp <- map(da_symbols, ~enrichGO(gene = .,
+ego_bp <- map(prots_list, ~enrichGO(gene = .,
                 OrgDb         = org.Hs.eg.db,
-                universe = mapped_genes,
+                universe = universe_df,
                 keyType       = 'SYMBOL',
                 ont           = "BP",
                 pAdjustMethod = "BH",
                 pvalueCutoff  = 0.05,
                 qvalueCutoff  = 0.05))
-ego_bp <- map(ego_bp,enrichplot::pairwise_termsim)
-ego_bp2 <- ego_bp %>% 
-  map(~clusterProfiler::simplify(., cutoff=0.4, by="p.adjust", select_fun=min))
+ego_bp_suc <- map(keep(ego_bp, ~nrow(.) > 0),enrichplot::pairwise_termsim)
+ego_bp2 <- ego_bp_suc %>% 
+  map(~clusterProfiler::simplify(., cutoff=0.7, by="p.adjust", select_fun=min)) %>% 
+  set_names(str_c(names(.), "GOBP", sep = "__"))
+
+#Create a list for different C2 databases
+prots_c2_list <- cross2(prots_list, list("KEGG" = c2_kegg, "REACTOME" = c2_react)) %>% 
+  set_names(map_chr(cross2(names(prots_list),c("KEGG","REACTOME")), reduce, str_c, sep = "__"))
+
+enrich_c2_list <- map(prots_c2_list, ~enricher(.x [[1]],
+                     TERM2GENE = .x [[2]],
+                     universe = universe_df,
+                     pAdjustMethod = "BH",
+                     pvalueCutoff = 0.05,
+                     qvalueCutoff = 0.05))
+
 ```
 
-Plot the functional enrichment results
+Plot the functional enrichment results. Combine the up and down regulated pathways from the same database.
+Calculate OddsRatio as [described here](https://support.bioconductor.org/p/89304/)
 
-```{r cluster-plotting, fig.height=9, fig.width=7}
+```{r cluster-plot-prep, fig.height=9, fig.width=7}
+#Keep only groups with significant results
+enrich_h_suc_list <- keep(enrich_h_list, ~nrow(.) > 0) %>% 
+  set_names(str_c(names(.),"Hallmark",  sep = "__"))
+
+#Process the dataframes 
+enrich_df_list <- prepend(ego_bp2,enrich_h_suc_list) %>%   
+  prepend(keep(enrich_c2_list, ~nrow(.) > 0)) %>%  
+  map(as.data.frame) %>% 
+  map(mutate, 
+      num_gene_ratio = sapply(GeneRatio, function(x) eval(parse(text=x))),
+      num_bg_ratio = sapply(BgRatio, function(x) eval(parse(text=x)))) %>% 
+  map(mutate, OddsRatio = num_gene_ratio/num_bg_ratio)
+enrich_df_list <- enrich_df_list %>% 
+  map2(names(enrich_df_list), 
+       ~mutate(.x, Direction = if_else(str_detect(.y,"Up"), "Up-regulated","Down-regulated")))
+#Combine the dataframes for up and down regulation
+enrich_df_comb_list <- vector(mode = "list", length = 1)
+names(enrich_df_comb_list) <- "placeholder"
+j <- 1
+#Create a loop to combine all the dataframes
+for (i in seq_along(enrich_df_list)) {
+  #Extract the db and fraction name from the list name
+  df_name <- names(enrich_df_list) [i]
+  fract_name <- str_remove(str_extract(df_name, "[:alpha:]+[-_]"),"[-_]")
+  db_name <- str_remove(str_extract(df_name, "__.+"),"__") 
+  index <- intersect(str_which(names(enrich_df_list), fract_name),str_which(names(enrich_df_list), db_name))
+  enrich_df_comb_list [[j]] <- reduce(enrich_df_list [index], bind_rows) 
+  names(enrich_df_comb_list) [j] <- str_c(fract_name, db_name, sep = "__")
+  j <- j+1
+}  
+#Remove duplicate entries and clean up names
+enrich_df_comb_unq_list <- keep(enrich_df_comb_list, !base::duplicated(enrich_df_comb_list)) %>% 
+  map(mutate, 
+      clean_ID = str_remove(ID, "(KEGG)|(REACTOME)|(HALLMARK)"),
+      clean_ID = str_replace_all(clean_ID, "_", " "),
+      clean_ID = str_to_sentence(clean_ID))
+#Print the results into csv
+#walk2(enrich_df_comb_unq_list, names(enrich_df_comb_unq_list),
+ #     ~write_csv(.x, file = here::here(str_c("final results/enrichment_results/",.y,".csv"))))
+```
+
+Make the dotplots of the results
+```{r cluster-plot, fig.height=6, fig.width=8}
+#Finally can plot the results
+#Plot cytoplasmic reactome separately
+same_dim_dots <- keep(enrich_df_comb_unq_list, ~nrow(.) < 30)
+dummy_df <- same_dim_dots [[1]] %>% 
+  mutate(clean_ID = fct_reorder(clean_ID, OddsRatio))
+
+ggplot(dummy_df, aes(x = OddsRatio, y = clean_ID )) +
+  geom_point(aes(color = Direction, size = qvalue)) +
+  labs(y = element_blank(), title ="", size = "Significance") +
+  scale_color_manual(values = div_pal [c(7,1)]) + 
+  scale_size(range = c(10,3), labels = function(x) {str_c("q = ", x)}) +
+  guides(color = guide_legend(override.aes = list(size = 3))) +
+  coord_cartesian(clip = "off") +
+  theme_bw(base_size = 14) +
+  theme(panel.grid = element_blank(),
+        axis.text.y = element_markdown())
+```
+
+
+```{r cluster-plot-1, fig.height=9, fig.width=7}
 dot_titles <- rep(c("Hallmark geneset", "C2 Canonical Pathways", "GO BP"), each = 2) %>% 
   str_c(names(da_genes), sep = "\n")
 #pdf(here::here("Functional enrichment analyses.pdf"), height = 9, width = 7)
