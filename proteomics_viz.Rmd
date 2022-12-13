@@ -223,14 +223,21 @@ Make the dotplots of the results
 #Finally can plot the results
 #Plot cytoplasmic reactome separately
 same_dim_dots <- keep(enrich_df_comb_unq_list, ~nrow(.) < 30)
+
 dummy_df <- same_dim_dots [[1]] %>% 
   mutate(clean_ID = fct_reorder(clean_ID, OddsRatio))
+
+#Create labels
+dummy_labels <- glue_data(dummy_df, 
+                          "<span style='color: {if_else(Direction == 'Down-regulated', 'red', 'blue')}'>{clean_ID}</span>")
+names(dummy_labels) <- dummy_df$clean_ID
 
 ggplot(dummy_df, aes(x = OddsRatio, y = clean_ID )) +
   geom_point(aes(color = Direction, size = qvalue)) +
   labs(y = element_blank(), title ="", size = "Significance") +
   scale_color_manual(values = div_pal [c(7,1)]) + 
   scale_size(range = c(10,3), labels = function(x) {str_c("q = ", x)}) +
+  scale_y_discrete(labels = dummy_labels) +
   guides(color = guide_legend(override.aes = list(size = 3))) +
   coord_cartesian(clip = "off") +
   theme_bw(base_size = 14) +
