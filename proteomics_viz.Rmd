@@ -15,6 +15,7 @@ library(ggprism)
 library(patchwork)
 library(ggtext)
 library(glue)
+library(umap)
 ```
 
 Set up parameters - like colors 
@@ -210,50 +211,114 @@ for (i in seq_along(enrich_df_list)) {
 #Remove duplicate entries and clean up names
 enrich_df_comb_unq_list <- keep(enrich_df_comb_list, !base::duplicated(enrich_df_comb_list)) %>% 
   map(mutate, 
-      clean_ID = str_remove(ID, "(KEGG)|(REACTOME)|(HALLMARK)"),
+      clean_ID = str_remove(Description, "(KEGG)|(REACTOME)|(HALLMARK)"),
       clean_ID = str_replace_all(clean_ID, "_", " "),
-      clean_ID = str_to_sentence(clean_ID))
+      clean_ID = str_to_sentence(clean_ID),
+      clean_ID = str_replace_all(clean_ID, "[Rr]na", "RNA"),
+      clean_ID = str_replace_all(clean_ID, "RRNA", "rRNA"),
+      clean_ID = str_replace_all(clean_ID, "E2f", "E2F"),
+      clean_ID = str_replace_all(clean_ID, "[Aa]tp", "ATP"),
+      clean_ID = str_replace_all(clean_ID, " i ", " I "),
+      clean_ID = str_replace_all(clean_ID, " ii", " II"),
+      clean_ID = str_replace_all(clean_ID, " IIi", " III"),
+      clean_ID = str_replace_all(clean_ID, "[Jj]ak", "JAK"),
+      clean_ID = str_replace_all(clean_ID, " [Ss]tat", " STAT"),
+      clean_ID = str_replace_all(clean_ID, "[Tt]ca", "TCA"),
+      clean_ID = str_replace_all(clean_ID, "[Aa]pc c", "APC C"),
+      clean_ID = str_replace_all(clean_ID, "cdh", "CDH"),
+      clean_ID = str_replace_all(clean_ID, "cdc", "CDC"),
+      clean_ID = str_replace_all(clean_ID, "3s", "3S"),
+      clean_ID = str_replace_all(clean_ID, "k11", "K11"),
+      clean_ID = str_wrap(clean_ID, width = 30))
 #Print the results into csv
 #walk2(enrich_df_comb_unq_list, names(enrich_df_comb_unq_list),
  #     ~write_csv(.x, file = here::here(str_c("final results/enrichment_results/",.y,".csv"))))
 ```
 
 Make the dotplots of the results
-```{r cluster-plot, fig.height=6, fig.width=8}
+```{r cluster-plot, fig.height=5, fig.width=8}
 #Finally can plot the results
-#Plot cytoplasmic reactome separately
-same_dim_dots <- keep(enrich_df_comb_unq_list, ~nrow(.) < 30)
-
-dummy_df <- same_dim_dots [[1]] %>% 
-  mutate(clean_ID = fct_reorder(clean_ID, OddsRatio))
-
+#Plot some plots separately
+same_dim_dots <- enrich_df_comb_unq_list %>% 
+  map(mutate, 
+      clean_ID = fct_reorder(clean_ID, OddsRatio),
+      Mito = "No")
+#Prep keywords to identify mitochondrial categories
+mito_key <- c("Mitochondria", "NADH", "Energy", "Respiratory", "ATP", "Oxidative", "Complex",  "Respir", "ATP", "Oxidoreductase",
+              "TCA")
+#Loop through the keywords to identify the categories of relevance 
+same_dim_dots <- same_dim_dots %>% 
+  map(mutate, 
+      Mito = map_lgl(clean_ID, ~any(str_detect(str_to_lower(.x),str_to_lower(mito_key)))))
 #Create labels
-dummy_labels <- glue_data(dummy_df, 
-                          "<span style='color: {if_else(Direction == 'Down-regulated', 'red', 'blue')}'>{clean_ID}</span>")
-names(dummy_labels) <- dummy_df$clean_ID
-
-ggplot(dummy_df, aes(x = OddsRatio, y = clean_ID )) +
-  geom_point(aes(color = Direction, size = qvalue)) +
-  labs(y = element_blank(), title ="", size = "Significance") +
-  scale_color_manual(values = div_pal [c(7,1)]) + 
-  scale_size(range = c(10,3), labels = function(x) {str_c("q = ", x)}) +
-  scale_y_discrete(labels = dummy_labels) +
-  guides(color = guide_legend(override.aes = list(size = 3))) +
-  coord_cartesian(clip = "off") +
-  theme_bw(base_size = 14) +
-  theme(panel.grid = element_blank(),
-        axis.text.y = element_markdown())
-```
-
-
-```{r cluster-plot-1, fig.height=9, fig.width=7}
-dot_titles <- rep(c("Hallmark geneset", "C2 Canonical Pathways", "GO BP"), each = 2) %>% 
-  str_c(names(da_genes), sep = "\n")
-#pdf(here::here("Functional enrichment analyses.pdf"), height = 9, width = 7)
-walk2(c(enrich_h_list, enrich_c2_list, ego_bp2), dot_titles, 
-      ~print(dotplot(.x, showCategory = 15) + ggtitle(.y)))
+same_dim_dots_labs_list <- same_dim_dots %>% 
+  map(~glue_data(.x, "<span style='color: {if_else(Mito == 'TRUE', 'red', 'black')}'>{str_replace_all(clean_ID, '\\\\n','<br>')}</span>")) %>% 
+  map2(same_dim_dots,~set_names(.x, nm = pull(.y, var = "clean_ID")))
+#Select only plots with low category number to plot
+small_index <- c(5,7)
+#pdf(here::here("final results/enrichment results low cat number.pdf"), width = 8, height = 5)
+pwalk(list(same_dim_dots [small_index], same_dim_dots_labs_list [small_index], names(same_dim_dots) [small_index]), 
+      ~print(ggplot(..1, aes(x = OddsRatio, y = clean_ID )) +
+               geom_point(aes(color = Direction, size = qvalue)) +
+               labs(y = element_blank(), title =..3, size = "Significance") +
+               scale_color_manual(values = div_pal [c(7,1)]) + 
+               scale_size(range = c(10,3), labels = function(x) {str_c("q = ", x)}) +
+               scale_y_discrete(labels = ..2) +
+               guides(color = guide_legend(override.aes = list(size = 3))) +
+               coord_cartesian(clip = "off") +
+               theme_bw(base_size = 14) +
+               theme(panel.grid = element_blank(),
+                     axis.text.y = element_markdown(lineheight = 1.1))))
 #dev.off()
 ```
+Now plot graphs of intermediate category number
+```{r cluster-plot-intermedi, fig.height=6.66, fig.width=8}
+inter_index <- c(-3,-4)
+#pdf(here::here("final results/enrichment results medium cat number.pdf"), width = 8, height = 6.66)
+pwalk(list(same_dim_dots [inter_index], same_dim_dots_labs_list [inter_index], names(same_dim_dots) [inter_index]), 
+      ~print(ggplot(..1, aes(x = OddsRatio, y = clean_ID )) +
+               geom_point(aes(color = Direction, size = qvalue)) +
+               labs(y = element_blank(), title =..3, size = "Significance") +
+               scale_color_manual(values = div_pal [c(7,1)]) + 
+               scale_size(range = c(10,3), labels = function(x) {str_c("q = ", x)}) +
+               scale_y_discrete(labels = ..2) +
+               guides(color = guide_legend(override.aes = list(size = 3))) +
+               coord_cartesian(clip = "off") +
+               theme_bw(base_size = 14) +
+               theme(panel.grid = element_blank(),
+                     axis.text.y = element_markdown(lineheight = 0.7))))
+#dev.off()
+```
+
+Finally plot graphs of large category number
+
+```{r cluster-plot-large, fig.height=9.5, fig.width=10}
+large_index <- c(3,4)
+same_dim_dots <- same_dim_dots %>% 
+  map_at(large_index, slice_head, n=20)
+
+#pdf(here::here("final results/enrichment results large cat number.pdf"), width = 10, height = 9.5)
+pwalk(list(same_dim_dots [large_index], same_dim_dots_labs_list [large_index], names(same_dim_dots) [large_index]), 
+      ~print(ggplot(..1, aes(x = OddsRatio, y = clean_ID )) +
+               geom_point(aes(color = Direction, size = qvalue)) +
+               labs(y = element_blank(), title =..3, size = "Significance") +
+               scale_color_manual(values = div_pal [c(7,1)]) + 
+               scale_size(range = c(10,3), labels = function(x) {str_c("q = ", x)}) +
+               scale_y_discrete(labels = ..2) +
+               guides(color = guide_legend(override.aes = list(size = 3))) +
+               coord_cartesian(clip = "off") +
+               theme_bw(base_size = 14) +
+               theme(panel.grid = element_blank(),
+                     axis.text.y = element_markdown(lineheight = 1.1))))
+#dev.off()
+```
+Last step is to create a UMAP graph of the data
+```{r umap}
+#Import vsn-normalized counts
+
+```
+
+
 # Session Info
 ```{r}
 sessionInfo()
