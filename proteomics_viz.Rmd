@@ -339,28 +339,28 @@ umap_df_list <- umap_fit_list %>%
   map(mutate, Condition = if_else(str_detect(sample, "L"), "LCA", "Control"))
 
 #Plot the results
-#pdf(here::here("final results/UMAP plots.pdf"), width = 6, height = 4)
-walk2(umap_df_list, names(umap_df_list), 
-      ~print(ggplot(.x, aes(UMAP1,UMAP2, color = Condition)) + 
-               geom_point(size = 3.5) +
-               theme_bw(base_size = 14) + 
-               labs(title = .y) +
-               scale_color_manual(values = c("black","grey70")) +
-               theme(panel.grid = element_blank())
-               ))
-walk2(umap_df_list, names(umap_df_list), 
-      ~print(ggplot(.x, aes(UMAP1,UMAP2, color = Condition)) + 
-               geom_point(size = 3.5) +
-               labs(title = .y, x = " ", y = " ") +
-               theme_void(base_size = 16) + 
-               scale_color_manual(values = c("black","grey70")) +
-               theme(panel.border = element_rect(linewidth = 1, color = "grey50", fill = NA),
-                     panel.grid = element_blank(),
-                     legend.title = element_blank(),
-                     axis.title = element_text())
-      ))
-#dev.off()
-
+umap_with_elements <- map2(umap_df_list, names(umap_df_list), 
+                           ~ggplot(.x, aes(UMAP1,UMAP2, color = Condition)) + 
+                             geom_point(size = 3.5) +
+                             theme_bw(base_size = 14) + 
+                             labs(title = .y) +
+                             scale_color_manual(values = c("black","grey70")) +
+                             theme(panel.grid = element_blank()))
+#walk2(umap_with_elements, names(umap_with_elements),
+ #     ~ggsave(filename = here::here(str_c("final results/UMAP with axis elements ",.y,".png")), plot = .x, dpi = 1080, width = 6, height = 4))
+umap_blank <- map2(umap_df_list, names(umap_df_list), 
+                   ~ggplot(.x, aes(UMAP1,UMAP2, color = Condition)) + 
+                     geom_point(size = 3.5) +
+                     labs(title = .y, x = " ", y = " ") +
+                     theme_void(base_size = 16) + 
+                     scale_color_manual(values = c("black","grey70")) +
+                     theme(panel.border = element_rect(linewidth = 1, color = "grey50", fill = NA),
+                           panel.grid = element_blank(),
+                           legend.title = element_blank(),
+                           axis.title = element_text(),
+                           plot.background = element_rect(fill = "white")))
+#walk2(umap_blank, names(umap_blank),
+ #     ~ggsave(filename = here::here(str_c("final results/UMAP blank ",.y,".png")), plot = .x, dpi = 1080, width = 6, height = 4))
 ```
 
 
