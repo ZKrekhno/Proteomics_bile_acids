@@ -256,20 +256,20 @@ same_dim_dots_labs_list <- same_dim_dots %>%
   map2(same_dim_dots,~set_names(.x, nm = pull(.y, var = "clean_ID")))
 #Select only plots with low category number to plot
 small_index <- c(5,7)
-#pdf(here::here("final results/enrichment results low cat number.pdf"), width = 8, height = 5)
-pwalk(list(same_dim_dots [small_index], same_dim_dots_labs_list [small_index], names(same_dim_dots) [small_index]), 
-      ~print(ggplot(..1, aes(x = OddsRatio, y = clean_ID )) +
-               geom_point(aes(color = Direction, size = qvalue)) +
-               labs(y = element_blank(), title =..3, size = "Significance") +
-               scale_color_manual(values = div_pal [c(7,1)]) + 
-               scale_size(range = c(10,3), labels = function(x) {str_c("q = ", x)}) +
-               scale_y_discrete(labels = ..2) +
-               guides(color = guide_legend(override.aes = list(size = 3))) +
-               coord_cartesian(clip = "off") +
-               theme_bw(base_size = 14) +
-               theme(panel.grid = element_blank(),
-                     axis.text.y = element_markdown(lineheight = 1.1))))
-#dev.off()
+low_cat_n_p <-  pmap(list(same_dim_dots [small_index], same_dim_dots_labs_list [small_index], names(same_dim_dots) [small_index]), 
+                     ~ggplot(..1, aes(x = OddsRatio, y = clean_ID )) +
+                       geom_point(aes(color = Direction, size = qvalue)) +
+                       labs(y = element_blank(), title =..3, size = "Significance") +
+                       scale_color_manual(values = div_pal [c(7,1)]) + 
+                       scale_size(range = c(10,3), labels = function(x) {str_c("q = ", x)}) +
+                       scale_y_discrete(labels = ..2) +
+                       guides(color = guide_legend(override.aes = list(size = 3))) +
+                       coord_cartesian(clip = "off") +
+                       theme_bw(base_size = 14) +
+                       theme(panel.grid = element_blank(),
+                             axis.text.y = element_markdown(lineheight = 1.1)))
+#walk2(low_cat_n_p, names(low_cat_n_p), 
+ #     ~ggsave(filename = here::here(str_c("final results/enrichment results ",.y,".png")), plot = .x, dpi = 1080, width = 8, height = 5))
 ```
 Now plot graphs of intermediate category number
 ```{r cluster-plot-intermedi, fig.height=6.66, fig.width=8}
