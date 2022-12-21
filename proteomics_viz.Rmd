@@ -274,20 +274,20 @@ low_cat_n_p <-  pmap(list(same_dim_dots [small_index], same_dim_dots_labs_list [
 Now plot graphs of intermediate category number
 ```{r cluster-plot-intermedi, fig.height=6.66, fig.width=8}
 inter_index <- c(-3,-4)
-#pdf(here::here("final results/enrichment results medium cat number.pdf"), width = 8, height = 6.66)
-pwalk(list(same_dim_dots [inter_index], same_dim_dots_labs_list [inter_index], names(same_dim_dots) [inter_index]), 
-      ~print(ggplot(..1, aes(x = OddsRatio, y = clean_ID )) +
-               geom_point(aes(color = Direction, size = qvalue)) +
-               labs(y = element_blank(), title =..3, size = "Significance") +
-               scale_color_manual(values = div_pal [c(7,1)]) + 
-               scale_size(range = c(10,3), labels = function(x) {str_c("q = ", x)}) +
-               scale_y_discrete(labels = ..2) +
-               guides(color = guide_legend(override.aes = list(size = 3))) +
-               coord_cartesian(clip = "off") +
-               theme_bw(base_size = 14) +
-               theme(panel.grid = element_blank(),
-                     axis.text.y = element_markdown(lineheight = 0.7))))
-#dev.off()
+inter_cat_n_p <-pmap(list(same_dim_dots [inter_index], same_dim_dots_labs_list [inter_index], names(same_dim_dots) [inter_index]), 
+                     ~ggplot(..1, aes(x = OddsRatio, y = clean_ID )) +
+                       geom_point(aes(color = Direction, size = qvalue)) +
+                       labs(y = element_blank(), title =..3, size = "Significance") +
+                       scale_color_manual(values = div_pal [c(7,1)]) + 
+                       scale_size(range = c(10,3), labels = function(x) {str_c("q = ", x)}) +
+                       scale_y_discrete(labels = ..2) +
+                       guides(color = guide_legend(override.aes = list(size = 3))) +
+                       coord_cartesian(clip = "off") +
+                       theme_bw(base_size = 14) +
+                       theme(panel.grid = element_blank(),
+                             axis.text.y = element_markdown(lineheight = 0.7)))
+#walk2(inter_cat_n_p, names(inter_cat_n_p), 
+ #     ~ggsave(filename = here::here(str_c("final results/enrichment results ",.y,".png")), plot = .x, dpi = 1080, width = 8, height = 6.66))
 ```
 
 Finally plot graphs of large category number
@@ -297,20 +297,20 @@ large_index <- c(3,4)
 same_dim_dots <- same_dim_dots %>% 
   map_at(large_index, slice_head, n=20)
 
-#pdf(here::here("final results/enrichment results large cat number.pdf"), width = 10, height = 9.5)
-pwalk(list(same_dim_dots [large_index], same_dim_dots_labs_list [large_index], names(same_dim_dots) [large_index]), 
-      ~print(ggplot(..1, aes(x = OddsRatio, y = clean_ID )) +
-               geom_point(aes(color = Direction, size = qvalue)) +
-               labs(y = element_blank(), title =..3, size = "Significance") +
-               scale_color_manual(values = div_pal [c(7,1)]) + 
-               scale_size(range = c(10,3), labels = function(x) {str_c("q = ", x)}) +
-               scale_y_discrete(labels = ..2) +
-               guides(color = guide_legend(override.aes = list(size = 3))) +
-               coord_cartesian(clip = "off") +
-               theme_bw(base_size = 14) +
-               theme(panel.grid = element_blank(),
-                     axis.text.y = element_markdown(lineheight = 1.1))))
-#dev.off()
+large_cat_n_p <- pmap(list(same_dim_dots [large_index], same_dim_dots_labs_list [large_index], names(same_dim_dots) [large_index]), 
+                      ~ggplot(..1, aes(x = OddsRatio, y = clean_ID )) +
+                        geom_point(aes(color = Direction, size = qvalue)) +
+                        labs(y = element_blank(), title =..3, size = "Significance") +
+                        scale_color_manual(values = div_pal [c(7,1)]) + 
+                        scale_size(range = c(10,3), labels = function(x) {str_c("q = ", x)}) +
+                        scale_y_discrete(labels = ..2) +
+                        guides(color = guide_legend(override.aes = list(size = 3))) +
+                        coord_cartesian(clip = "off") +
+                        theme_bw(base_size = 14) +
+                        theme(panel.grid = element_blank(),
+                              axis.text.y = element_markdown(lineheight = 1.1)))
+#walk2(large_cat_n_p, names(large_cat_n_p), 
+ #    ~ggsave(filename = here::here(str_c("final results/enrichment results ",.y,".png")), plot = .x, dpi = 1080, width = 10, height = 9.5))
 ```
 Last step is to create a UMAP graph of the data
 ```{r umap, fig.width=6, fig.height=4}
