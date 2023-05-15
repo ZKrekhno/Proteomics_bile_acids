@@ -69,7 +69,7 @@ mq_intersect_top <- mq_res %>%
 
 
 # Volcano plots
-```{r volcano, fig.width=8, fig.height=6.6}
+```{r volcano, fig.width=5, fig.height=3.3}
 #Add categories for signifcance
 mq_res_volc_list <- mq_res_list %>% 
   map(mutate, 
@@ -84,18 +84,22 @@ mq_res_volc_list <- mq_res_list %>%
 volcano_list <- mq_res_volc_list %>% 
   map2(c("Membrane-bound Proteins", "Cytosolic Proteins"), 
        ~ ggplot(.x, aes(x = log2FoldChange, y = -log10(PValue))) +
-         geom_point(aes(fill = Significance, color = Significance), shape = 21, alpha = 0.5, size = 2.5) +
+         geom_point(aes(fill = Significance, color = Significance), shape = 21, alpha = 0.5, size = 1.5) +
          scale_color_manual(values = c("grey85",div_pal [c(1,7)])) +
          scale_fill_manual(values = c("grey85",div_pal [c(1,7)])) + 
-         labs(x = bquote(~Log[2] ~ "fold change"), y = bquote(~-Log[10] ~ italic(P)), title = .y) +
+         labs(x = bquote(~Log[2] ~ "fold change"), y = bquote(~-Log[10] ~ italic(P))) +
          theme_linedraw(base_size = 15) +
          theme(panel.grid = element_line(color =  "grey90"),
-               panel.grid.major = element_line(linewidth = 0.7),
-               panel.grid.minor = element_line(linewidth = 0.5),
+               panel.grid.major = element_blank(),
+               panel.grid.minor = element_blank(),
                panel.border = element_rect(fill = NA, color = "black", linewidth = 0.9)))
 walk(volcano_list, print)
 #walk2(volcano_list, names(volcano_list), 
- #    ~ggsave(here::here(str_c("final results/volcano_plot_",.y,".png")), plot = .x, width = 8, height = 6.66, dpi = 1080))
+    # ~ggsave(here::here(str_c("final results/volcano_plot_",.y,".pdf")), plot = .x, width = 8, height = 6.66, dpi = 1080))
+walk2(volcano_list, names(volcano_list), 
+     ~ggsave(here::here(str_c("final results/fig. 3b small_volcano_plot_",.y,".pdf")), plot = .x, width = 5, height = 3.33, dpi = 2160))
+#walk2(volcano_list, names(volcano_list), 
+ #    ~ggsave(here::here(str_c("final results/fig. 3b small_volcano_plot_",.y,".svg")), plot = .x, width = 5, height = 3.33, dpi = 2160))
 ```
 
 
@@ -236,7 +240,7 @@ enrich_df_comb_unq_list <- keep(enrich_df_comb_list, !base::duplicated(enrich_df
 ```
 
 Make the dotplots of the results
-```{r cluster-plot, fig.height=5, fig.width=8}
+```{r cluster-plot, fig.height=4, fig.width=7}
 #Finally can plot the results
 #Plot some plots separately
 same_dim_dots <- enrich_df_comb_unq_list %>% 
@@ -259,17 +263,24 @@ small_index <- c(5,7)
 low_cat_n_p <-  pmap(list(same_dim_dots [small_index], same_dim_dots_labs_list [small_index], names(same_dim_dots) [small_index]), 
                      ~ggplot(..1, aes(x = OddsRatio, y = clean_ID )) +
                        geom_point(aes(color = Direction, size = qvalue)) +
-                       labs(y = element_blank(), title =..3, size = "Significance") +
+                       labs(y = element_blank(), title =str_remove(..3, ".+__"), size = "Significance") +
                        scale_color_manual(values = div_pal [c(7,1)]) + 
-                       scale_size(range = c(10,3), labels = function(x) {str_c("q = ", x)}) +
+                       scale_size(range = c(8,4), labels = function(x) {str_c("q = ", x)}) +
                        scale_y_discrete(labels = ..2) +
                        guides(color = guide_legend(override.aes = list(size = 3))) +
                        coord_cartesian(clip = "off") +
-                       theme_bw(base_size = 14) +
+                       theme_bw(base_size = 15) +
                        theme(panel.grid = element_blank(),
                              axis.text.y = element_markdown(lineheight = 1.1)))
+
 #walk2(low_cat_n_p, names(low_cat_n_p), 
  #     ~ggsave(filename = here::here(str_c("final results/enrichment results ",.y,".png")), plot = .x, dpi = 1080, width = 8, height = 5))
+
+low_cat_n_p [2]
+#walk2(low_cat_n_p [2], names(low_cat_n_p) [2], 
+ #     ~ggsave(filename = here::here(str_c("final results/fig. 3C enrichment results ",.y,".pdf")), plot = .x, dpi = 1080, width = 7, height = 4))
+#walk2(low_cat_n_p [2], names(low_cat_n_p) [2], 
+ #     ~ggsave(filename = here::here(str_c("final results/fig. 3C enrichment results ",.y,".svg")), plot = .x, dpi = 1080, width = 7, height = 4))
 ```
 Now plot graphs of intermediate category number
 ```{r cluster-plot-intermedi, fig.height=6.66, fig.width=8}
@@ -295,7 +306,8 @@ Finally plot graphs of large category number
 ```{r cluster-plot-large, fig.height=9.5, fig.width=10}
 large_index <- c(3,4)
 same_dim_dots <- same_dim_dots %>% 
-  map_at(large_index, slice_head, n=20)
+  map(arrange, qvalue) %>% 
+  map_at(large_index, slice_head, n=20) 
 
 large_cat_n_p <- pmap(list(same_dim_dots [large_index], same_dim_dots_labs_list [large_index], names(same_dim_dots) [large_index]), 
                       ~ggplot(..1, aes(x = OddsRatio, y = clean_ID )) +
@@ -312,6 +324,33 @@ large_cat_n_p <- pmap(list(same_dim_dots [large_index], same_dim_dots_labs_list 
 #walk2(large_cat_n_p, names(large_cat_n_p), 
  #    ~ggsave(filename = here::here(str_c("final results/enrichment results ",.y,".png")), plot = .x, dpi = 1080, width = 10, height = 9.5))
 ```
+
+
+```{r cluster-plot-fig-3b, fig.height=5, fig.width=7}
+#Change the membrane reactome figure for the manuscript according to requests
+manu_df <- same_dim_dots [large_index [1]] %>%   
+  rep(., 2) %>% 
+  map2(c(5,7), ~slice_head(.x, n=.y))
+
+manu_figs <- pmap(list(manu_df, same_dim_dots_labs_list [rep(large_index [1],2)], names(manu_df)), 
+                      ~ggplot(..1, aes(x = OddsRatio, y = clean_ID )) +
+                        geom_point(aes(color = Direction, size = qvalue)) +
+                        labs(y = element_blank(), title =str_remove(..3, ".+__"), size = "Significance") +
+                        scale_color_manual(values = div_pal [c(7,1)]) + 
+                        scale_size(range = c(8,4), labels = function(x) {str_c("q = ", x)},
+                                   breaks = scales::breaks_extended(n=3)) +
+                        scale_y_discrete(labels = ..2) +
+                        guides(color = guide_legend(override.aes = list(size = 3))) +
+                        coord_cartesian(clip = "off") +
+                        theme_bw(base_size = 15) +
+                        theme(panel.grid = element_blank(),
+                              axis.text.y = element_markdown(lineheight = 1.1)))
+#pwalk(list(manu_figs, names(manu_figs),c(5,7)), 
+ #    ~ggsave(filename = here::here(str_c("final results/fig 3D enrichment results ",..2," top ", ..3, ".pdf")), plot = ..1, dpi = 1080, width = 7, height = 5))
+#pwalk(list(manu_figs, names(manu_figs),c(5,7)), 
+ #    ~ggsave(filename = here::here(str_c("final results/fig 3D enrichment results ",..2," top ", ..3, ".svg")), plot = ..1, width = 7, height = 5))
+
+```
 Last step is to create a UMAP graph of the data
 ```{r umap, fig.width=6, fig.height=4}
 #Import vsn-normalized counts
@@ -319,7 +358,7 @@ vsn_mq <- read_tsv(here::here(here::here("normalyzer/test_run/VSN-normalized.txt
 vsn_mq_mat <- vsn_mq %>% 
   column_to_rownames(var = "Majority protein IDs") %>% 
   #vsn is akin to log-transform so replace missing values with 1s (log of 0 is 1)
-  mutate(across(.fns = ~as.numeric(str_replace_na(.x, replacement = 1)))) %>% 
+  mutate(across(.fns = ~as.numeric(str_replace_na(.x, replacement = "1")))) %>% 
   as.matrix() %>% 
   t()
 #Create list of fraction-based samples
@@ -365,7 +404,7 @@ umap_blank <- map2(umap_df_list, names(umap_df_list),
 
 
 # Session Info
-```{r}
+```{r eval=FALSE}
 sessionInfo()
 ```
 
